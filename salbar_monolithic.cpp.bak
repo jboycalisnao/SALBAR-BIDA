@@ -1,0 +1,1441 @@
+#include <iostream>
+#include <iomanip>
+#include <string>
+#include <fstream>
+#include <sstream>
+
+using namespace std;
+
+// ========================================================================================
+// GLOBAL CONSTANTS (Unit 1: Understanding Variables and Constants)
+// ========================================================================================
+const int MAX_FAMILIES = 200;
+const int MAX_CENTERS  = 50;
+const int MAX_REQUESTS = 200;
+const int MAX_EVACUEES = 200;
+
+// Multi-dimensional array dimensions for demographic matrix (Unit 6: Multi-dimensional Arrays)
+// Rows: 3 (0 = LOW, 1 = MODERATE, 2 = HIGH)
+// Columns: 5 (0 = Children, 1 = Seniors, 2 = PWDs, 3 = Pregnant, 4 = Medical Needs)
+const int VULN_LEVEL_ROWS = 3;
+const int DEMO_COLUMNS   = 5;
+
+// Data persistence filenames (Case 7: Save and Exit)
+const string FILE_FAMILIES = "families.txt";
+const string FILE_CENTERS  = "centers.txt";
+const string FILE_REQUESTS = "requests.txt";
+const string FILE_EVACUEES = "evacuees.txt";
+const string FILE_CONFIG   = "config.txt";
+
+// ========================================================================================
+// DATA STRUCTURES (Unit 1 & 6: Data Organization & Records)
+// ========================================================================================
+struct VulnerabilityDetails {
+    int children;
+    int seniorCitizens;
+    int personsWithDisabilities;
+    int pregnantMembers;
+    int medicalNeeds;
+};
+
+struct Family {
+    string familyCode;                  // e.g., "FAM-0001"
+    string headOfFamily;                // Full Name
+    int numberOfFamilyMembers;          // Total family size
+    int numberOfVulnerableMembers;      // Count of vulnerable individuals
+    int vulnerabilityScore;             // Computed vulnerability score
+    string vulnerabilityLevel;          // "HIGH", "MODERATE", "LOW"
+    VulnerabilityDetails details;       // Sub-demographic breakdown
+    bool isEvacuated;                   // Status whether relocated to center
+};
+
+struct EvacuationCenter {
+    string facilityName;                // Name of gym, hall, school, etc.
+    string facilityType;                // "Barangay Hall", "Gymnasium", "School", etc.
+    int maximumCapacity;                // Max persons allowable
+    int currentOccupancy;               // Current persons housed
+};
+
+struct ReliefRequest {
+    string requestId;                   // e.g., "REQ-0001"
+    string familyCode;                  // Foreign key link to Family
+    string requestType;                 // "Food Pack", "Medical", "Rescue", etc.
+    string requestDescription;          // Detailed description
+    bool isEmergency;                   // Emergency flag
+    bool hasMitigatingCircumstances;    // Mitigating circumstances flag
+    int priorityLevel;                  // 1 (Highest) to 4 (Lowest)
+    string requestStatus;               // "PENDING", "APPROVED", "IN_PROGRESS", "RESOLVED"
+};
+
+struct Evacuee {
+    string evacueeId;                   // e.g., "EVAC-0001"
+    string familyCode;                  // Reference to Family
+    string fullName;                    // Evacuee Name
+    int age;                            // Age
+    string assignedCenter;              // Name of Evacuation Center
+    string specialNeeds;                // Medical/dietary needs
+};
+
+// ========================================================================================
+// FUNCTION PROTOTYPES (Unit 5: Function Declaration and Modular Programming)
+// ========================================================================================
+
+// System & Utility Helpers
+void displayHeader();
+void clearInputBuffer();
+string formatCode(const string& prefix, int number, int width);
+string toUpperCase(string str);
+bool promptConfirmation(const string& actionPrompt);
+
+// Vulnerability Assessment (Unit 1, 2, 5: Computation and Logic)
+int calculateVulnerabilityScore(const VulnerabilityDetails& details);
+string determineVulnerabilityLevel(int score);
+
+// Function Overloading (Unit 5: Overloading Functions)
+void displayRecord(const Family& family, bool detailed = false);
+void displayRecord(const EvacuationCenter& center);
+void displayRecord(const ReliefRequest& request);
+void displayRecord(const Evacuee& evacuee);
+
+// Searching with Recursion (LO2 & LO3: Recursive Functions)
+int recursiveSearchFamily(const Family families[], int size, const string& code, int index = 0);
+int recursiveSearchCenter(const EvacuationCenter centers[], int size, const string& name, int index = 0);
+int recursiveSearchRequest(const ReliefRequest requests[], int size, const string& reqId, int index = 0);
+int recursiveSearchEvacuee(const Evacuee evacuees[], int size, const string& id, int index = 0);
+
+// Recursive Aggregations (Unit 5: Recursion & Scope)
+int recursiveCountHighVulnerability(const Family families[], int n);
+int recursiveSumOccupancy(const EvacuationCenter centers[], int n);
+int recursiveSumPopulation(const Family families[], int n);
+int recursiveCountPendingRequests(const ReliefRequest requests[], int n);
+
+// Sorting (Unit 6: Array Sorting Algorithms & Recursion)
+void recursiveSortRequestsByPriority(ReliefRequest requests[], int n);
+
+// Multi-dimensional Array Demographic Analysis (Unit 6: Multi-dimensional Arrays)
+void generateDemographicMatrix(const Family families[], int familyCount, int matrix[VULN_LEVEL_ROWS][DEMO_COLUMNS]);
+void displayDemographicMatrix(const int matrix[VULN_LEVEL_ROWS][DEMO_COLUMNS]);
+
+// Menu Handler Functions (Modular Decomposition)
+void handleFamilyRegistration(Family families[], int& familyCount, int& nextFamilyNumber,
+                              Evacuee evacuees[], int& evacueeCount, int& nextEvacueeNumber);
+void handleViewPopulation(const Family families[], int familyCount,
+                          const Evacuee evacuees[], int evacueeCount);
+void handleEvacuationCenterManagement(EvacuationCenter centers[], int& centerCount);
+void handlePendingRequestEscalation(ReliefRequest requests[], int& requestCount, int& nextRequestNumber,
+                                    const Family families[], int familyCount);
+void handleEditOrDeleteRecords(Family families[], int& familyCount,
+                               Evacuee evacuees[], int& evacueeCount);
+void handlePopulationSummary(const Family families[], int familyCount,
+                             const EvacuationCenter centers[], int centerCount,
+                             const ReliefRequest requests[], int requestCount);
+void handleSaveAndExit(const Family families[], int familyCount,
+                       const EvacuationCenter centers[], int centerCount,
+                       const ReliefRequest requests[], int requestCount,
+                       const Evacuee evacuees[], int evacueeCount,
+                       int nextFamilyNumber, int nextRequestNumber, int nextEvacueeNumber);
+
+// File Persistence Helpers
+void loadData(Family families[], int& familyCount,
+              EvacuationCenter centers[], int& centerCount,
+              ReliefRequest requests[], int& requestCount,
+              Evacuee evacuees[], int& evacueeCount,
+              int& nextFamilyNumber, int& nextRequestNumber, int& nextEvacueeNumber);
+void saveData(const Family families[], int familyCount,
+              const EvacuationCenter centers[], int centerCount,
+              const ReliefRequest requests[], int requestCount,
+              const Evacuee evacuees[], int evacueeCount,
+              int nextFamilyNumber, int nextRequestNumber, int nextEvacueeNumber);
+
+// ========================================================================================
+// MAIN FUNCTION (Entry Point & Main Loop: Case Switch Construct)
+// ========================================================================================
+int main() {
+    // Array declarations (Unit 6: Declaring and Initializing Arrays)
+    Family familyList[MAX_FAMILIES];
+    EvacuationCenter evacuationCenterList[MAX_CENTERS];
+    ReliefRequest requestList[MAX_REQUESTS];
+    Evacuee evacueeList[MAX_EVACUEES];
+
+    // Counters and tracking state (Unit 1: Variables and Initialization)
+    int familyCount = 0;
+    int centerCount = 0;
+    int requestCount = 0;
+    int evacueeCount = 0;
+
+    int nextFamilyNumber = 1;
+    int nextRequestNumber = 1;
+    int nextEvacueeNumber = 1;
+
+    // Load any existing saved data from disk
+    loadData(familyList, familyCount,
+             evacuationCenterList, centerCount,
+             requestList, requestCount,
+             evacueeList, evacueeCount,
+             nextFamilyNumber, nextRequestNumber, nextEvacueeNumber);
+
+    int choice = 0;
+
+    // REPEAT ... UNTIL Choice = 7 (Unit 4: Do-While Iterative Structure)
+    do {
+        displayHeader();
+        cout << "1. Family Registration\n";
+        cout << "2. View Population\n";
+        cout << "3. Evacuation Center Management\n";
+        cout << "4. Pending Request Escalation\n";
+        cout << "5. Edit or Delete Records\n";
+        cout << "6. View Population Summary\n";
+        cout << "7. Save and Exit\n";
+        cout << "----------------------------------\n";
+        cout << "Enter Choice [1-7]: ";
+
+        if (!(cin >> choice)) {
+            cout << "\n[!] Invalid input. Please enter a valid number.\n";
+            clearInputBuffer();
+            choice = 0;
+            continue;
+        }
+        clearInputBuffer();
+
+        cout << "\n";
+
+        // SWITCH Choice (Unit 3: Switch Statements for Multi-way Selection)
+        switch (choice) {
+            case 1:
+                handleFamilyRegistration(familyList, familyCount, nextFamilyNumber,
+                                         evacueeList, evacueeCount, nextEvacueeNumber);
+                break;
+
+            case 2:
+                handleViewPopulation(familyList, familyCount, evacueeList, evacueeCount);
+                break;
+
+            case 3:
+                handleEvacuationCenterManagement(evacuationCenterList, centerCount);
+                break;
+
+            case 4:
+                handlePendingRequestEscalation(requestList, requestCount, nextRequestNumber,
+                                               familyList, familyCount);
+                break;
+
+            case 5:
+                handleEditOrDeleteRecords(familyList, familyCount, evacueeList, evacueeCount);
+                break;
+
+            case 6:
+                handlePopulationSummary(familyList, familyCount, evacuationCenterList,
+                                        centerCount, requestList, requestCount);
+                break;
+
+            case 7:
+                handleSaveAndExit(familyList, familyCount,
+                                  evacuationCenterList, centerCount,
+                                  requestList, requestCount,
+                                  evacueeList, evacueeCount,
+                                  nextFamilyNumber, nextRequestNumber, nextEvacueeNumber);
+                break;
+
+            default:
+                cout << "Invalid choice. Please try again.\n";
+                break;
+        }
+
+        cout << "\n";
+    } while (choice != 7);
+
+    return 0;
+}
+
+// ========================================================================================
+// UTILITY & HELPER FUNCTIONS
+// ========================================================================================
+
+void displayHeader() {
+    cout << "==================================\n";
+    cout << " SALBAR: BARANGAY DISASTER RELIEF \n";
+    cout << "==================================\n";
+}
+
+void clearInputBuffer() {
+    cin.clear();
+    while (cin.peek() != '\n' && cin.peek() != EOF) {
+        cin.get();
+    }
+    if (cin.peek() == '\n') {
+        cin.get();
+    }
+}
+
+string formatCode(const string& prefix, int number, int width) {
+    ostringstream oss;
+    oss << prefix << setfill('0') << setw(width) << number;
+    return oss.str();
+}
+
+string toUpperCase(string str) {
+    for (size_t i = 0; i < str.length(); ++i) {
+        if (str[i] >= 'a' && str[i] <= 'z') {
+            str[i] = static_cast<char>(str[i] - ('a' - 'A'));
+        }
+    }
+    return str;
+}
+
+bool promptConfirmation(const string& actionPrompt) {
+    char confirm;
+    cout << actionPrompt << " (Y/N): ";
+    cin >> confirm;
+    clearInputBuffer();
+    return (confirm == 'Y' || confirm == 'y');
+}
+
+// ========================================================================================
+// VULNERABILITY ASSESSMENT LOGIC (Unit 1 & 2: Expressions, Arithmetic, Logic)
+// ========================================================================================
+
+/*
+   Vulnerability Assessment Weight Rules:
+   - Children (< 12 yrs): 1 point each
+   - Senior Citizens (60+ yrs): 2 points each
+   - Persons with Disabilities (PWD): 3 points each
+   - Pregnant / Lactating Mothers: 3 points each
+   - Members with Chronic / Urgent Medical Needs: 3 points each
+*/
+int calculateVulnerabilityScore(const VulnerabilityDetails& details) {
+    int score = (details.children * 1) +
+                (details.seniorCitizens * 2) +
+                (details.personsWithDisabilities * 3) +
+                (details.pregnantMembers * 3) +
+                (details.medicalNeeds * 3);
+    return score;
+}
+
+string determineVulnerabilityLevel(int score) {
+    // Decision logic as specified directly in pseudocode
+    if (score >= 8) {
+        return "HIGH";
+    } else if (score >= 4) {
+        return "MODERATE";
+    } else {
+        return "LOW";
+    }
+}
+
+// ========================================================================================
+// RECURSIVE SEARCH FUNCTIONS (LO2, LO3, Unit 5: Recursion)
+// ========================================================================================
+
+int recursiveSearchFamily(const Family families[], int size, const string& code, int index) {
+    // Base case 1: reached end of array without match
+    if (index >= size) {
+        return -1;
+    }
+    // Base case 2: found match
+    if (families[index].familyCode == code) {
+        return index;
+    }
+    // Recursive step
+    return recursiveSearchFamily(families, size, code, index + 1);
+}
+
+int recursiveSearchCenter(const EvacuationCenter centers[], int size, const string& name, int index) {
+    if (index >= size) {
+        return -1;
+    }
+    if (toUpperCase(centers[index].facilityName) == toUpperCase(name)) {
+        return index;
+    }
+    return recursiveSearchCenter(centers, size, name, index + 1);
+}
+
+int recursiveSearchRequest(const ReliefRequest requests[], int size, const string& reqId, int index) {
+    if (index >= size) {
+        return -1;
+    }
+    if (requests[index].requestId == reqId) {
+        return index;
+    }
+    return recursiveSearchRequest(requests, size, reqId, index + 1);
+}
+
+int recursiveSearchEvacuee(const Evacuee evacuees[], int size, const string& id, int index) {
+    if (index >= size) {
+        return -1;
+    }
+    if (evacuees[index].evacueeId == id) {
+        return index;
+    }
+    return recursiveSearchEvacuee(evacuees, size, id, index + 1);
+}
+
+// ========================================================================================
+// RECURSIVE AGGREGATION FUNCTIONS (LO2, LO3, Unit 5: Recursion)
+// ========================================================================================
+
+int recursiveCountHighVulnerability(const Family families[], int n) {
+    // Base case
+    if (n <= 0) {
+        return 0;
+    }
+    // Recursive calculation: count in remaining elements + current element if HIGH
+    int count = (families[n - 1].vulnerabilityLevel == "HIGH") ? 1 : 0;
+    return count + recursiveCountHighVulnerability(families, n - 1);
+}
+
+int recursiveSumOccupancy(const EvacuationCenter centers[], int n) {
+    if (n <= 0) {
+        return 0;
+    }
+    return centers[n - 1].currentOccupancy + recursiveSumOccupancy(centers, n - 1);
+}
+
+int recursiveSumPopulation(const Family families[], int n) {
+    if (n <= 0) {
+        return 0;
+    }
+    return families[n - 1].numberOfFamilyMembers + recursiveSumPopulation(families, n - 1);
+}
+
+int recursiveCountPendingRequests(const ReliefRequest requests[], int n) {
+    if (n <= 0) {
+        return 0;
+    }
+    int isPending = (requests[n - 1].requestStatus == "PENDING") ? 1 : 0;
+    return isPending + recursiveCountPendingRequests(requests, n - 1);
+}
+
+// ========================================================================================
+// RECURSIVE SORTING (Unit 6: Sorting & Unit 5: Recursion)
+// Sorts Relief Requests by PriorityLevel in ascending numerical order (Priority 1 = Highest)
+// ========================================================================================
+void recursiveSortRequestsByPriority(ReliefRequest requests[], int n) {
+    // Base case: 1 or 0 elements are already sorted
+    if (n <= 1) {
+        return;
+    }
+
+    // Find the minimum priority level (highest urgency: 1 is highest, 4 is lowest) in requests[0..n-1]
+    int minIndex = 0;
+    for (int i = 1; i < n; ++i) {
+        if (requests[i].priorityLevel < requests[minIndex].priorityLevel) {
+            minIndex = i;
+        }
+    }
+
+    // Swap the highest priority request to the first position
+    if (minIndex != 0) {
+        ReliefRequest temp = requests[0];
+        requests[0] = requests[minIndex];
+        requests[minIndex] = temp;
+    }
+
+    // Recursively sort the remaining (n - 1) requests
+    recursiveSortRequestsByPriority(requests + 1, n - 1);
+}
+
+// ========================================================================================
+// FUNCTION OVERLOADING (Unit 5: Function Overloading)
+// ========================================================================================
+
+void displayRecord(const Family& family, bool detailed) {
+    cout << "Family Code    : " << family.familyCode << "\n";
+    cout << "Head of Family : " << family.headOfFamily << "\n";
+    cout << "Total Members  : " << family.numberOfFamilyMembers << "\n";
+    cout << "Vulnerability  : " << family.vulnerabilityLevel
+         << " (Score: " << family.vulnerabilityScore << ")\n";
+
+    if (detailed) {
+        cout << "  - Children (<12)        : " << family.details.children << "\n";
+        cout << "  - Senior Citizens (60+) : " << family.details.seniorCitizens << "\n";
+        cout << "  - Persons with Disability: " << family.details.personsWithDisabilities << "\n";
+        cout << "  - Pregnant Members      : " << family.details.pregnantMembers << "\n";
+        cout << "  - Medical Needs         : " << family.details.medicalNeeds << "\n";
+        cout << "  - Evacuated Status      : " << (family.isEvacuated ? "YES" : "NO") << "\n";
+    }
+}
+
+void displayRecord(const EvacuationCenter& center) {
+    int availableSlots = center.maximumCapacity - center.currentOccupancy;
+    cout << left << setw(24) << center.facilityName
+         << setw(18) << center.facilityType
+         << right << setw(10) << center.maximumCapacity
+         << setw(12) << center.currentOccupancy
+         << setw(16) << availableSlots << "\n";
+}
+
+void displayRecord(const ReliefRequest& request) {
+    cout << left << setw(12) << request.requestId
+         << setw(12) << request.familyCode
+         << setw(20) << request.requestType
+         << right << setw(10) << request.priorityLevel
+         << "   " << left << setw(14) << request.requestStatus
+         << setw(24) << request.requestDescription << "\n";
+}
+
+void displayRecord(const Evacuee& evacuee) {
+    cout << left << setw(12) << evacuee.evacueeId
+         << setw(12) << evacuee.familyCode
+         << setw(24) << evacuee.fullName
+         << right << setw(6) << evacuee.age
+         << "   " << left << setw(20) << evacuee.assignedCenter
+         << setw(20) << evacuee.specialNeeds << "\n";
+}
+
+// ========================================================================================
+// MULTI-DIMENSIONAL ARRAY DEMOGRAPHICS (Unit 6: Multi-dimensional Arrays)
+// ========================================================================================
+void generateDemographicMatrix(const Family families[], int familyCount, int matrix[VULN_LEVEL_ROWS][DEMO_COLUMNS]) {
+    // Initialize matrix with zeroes
+    for (int r = 0; r < VULN_LEVEL_ROWS; ++r) {
+        for (int c = 0; c < DEMO_COLUMNS; ++c) {
+            matrix[r][c] = 0;
+        }
+    }
+
+    // Accumulate demographic counts into 2D grid based on vulnerability level
+    for (int i = 0; i < familyCount; ++i) {
+        int rowIndex = 0;
+        if (families[i].vulnerabilityLevel == "MODERATE") {
+            rowIndex = 1;
+        } else if (families[i].vulnerabilityLevel == "HIGH") {
+            rowIndex = 2;
+        }
+
+        matrix[rowIndex][0] += families[i].details.children;
+        matrix[rowIndex][1] += families[i].details.seniorCitizens;
+        matrix[rowIndex][2] += families[i].details.personsWithDisabilities;
+        matrix[rowIndex][3] += families[i].details.pregnantMembers;
+        matrix[rowIndex][4] += families[i].details.medicalNeeds;
+    }
+}
+
+void displayDemographicMatrix(const int matrix[VULN_LEVEL_ROWS][DEMO_COLUMNS]) {
+    cout << "\n---------------------------------------------------------------------------------\n";
+    cout << " DEMOGRAPHIC BREAKDOWN MATRIX (Vulnerability Level vs. Vulnerable Groups)\n";
+    cout << "---------------------------------------------------------------------------------\n";
+    cout << left << setw(12) << "Level"
+         << right << setw(12) << "Children"
+         << setw(12) << "Seniors"
+         << setw(12) << "PWD"
+         << setw(14) << "Pregnant"
+         << setw(16) << "Medical Needs\n";
+    cout << "---------------------------------------------------------------------------------\n";
+
+    const string levelNames[VULN_LEVEL_ROWS] = {"LOW", "MODERATE", "HIGH"};
+    for (int r = 0; r < VULN_LEVEL_ROWS; ++r) {
+        cout << left << setw(12) << levelNames[r];
+        for (int c = 0; c < DEMO_COLUMNS; ++c) {
+            cout << right << setw(12 + (c >= 3 ? 2 : 0)) << matrix[r][c];
+        }
+        cout << "\n";
+    }
+    cout << "---------------------------------------------------------------------------------\n";
+}
+
+// ========================================================================================
+// CASE 1: FAMILY REGISTRATION
+// ========================================================================================
+void handleFamilyRegistration(Family families[], int& familyCount, int& nextFamilyNumber,
+                              Evacuee evacuees[], int& evacueeCount, int& nextEvacueeNumber) {
+    cout << "==================================\n";
+    cout << "       FAMILY REGISTRATION        \n";
+    cout << "==================================\n";
+
+    if (familyCount >= MAX_FAMILIES) {
+        cout << "[!] Family capacity reached (" << MAX_FAMILIES << " families).\n";
+        return;
+    }
+
+    string headOfFamily;
+    int numberOfFamilyMembers;
+
+    cout << "Enter Head of Family: ";
+    getline(cin, headOfFamily);
+
+    cout << "Enter Number of Family Members: ";
+    if (!(cin >> numberOfFamilyMembers)) {
+        cout << "Invalid family information.\n";
+        clearInputBuffer();
+        return;
+    }
+    clearInputBuffer();
+
+    // IF HeadOfFamily is empty OR NumberOfFamilyMembers < 1
+    if (headOfFamily.empty() || numberOfFamilyMembers < 1) {
+        cout << "Invalid family information.\n";
+        return;
+    }
+
+    // GENERATE FamilyCode USING "FAM-" + NextFamilyNumber FORMAT NUMBER AS 4 DIGITS
+    string familyCode = formatCode("FAM-", nextFamilyNumber, 4);
+
+    VulnerabilityDetails details;
+    int vulnerableCount = 0;
+
+    cout << "Enter Number of Vulnerable Members: ";
+    cin >> vulnerableCount;
+
+    cout << "Enter Number of Children (<12 yrs): ";
+    cin >> details.children;
+
+    cout << "Enter Number of Senior Citizens (60+ yrs): ";
+    cin >> details.seniorCitizens;
+
+    cout << "Enter Number of Persons with Disabilities: ";
+    cin >> details.personsWithDisabilities;
+
+    cout << "Enter Number of Pregnant Members: ";
+    cin >> details.pregnantMembers;
+
+    cout << "Enter Number of Members with Medical Needs: ";
+    cin >> details.medicalNeeds;
+    clearInputBuffer();
+
+    // Validation for non-negative demographic counts
+    if (vulnerableCount < 0 || details.children < 0 || details.seniorCitizens < 0 ||
+        details.personsWithDisabilities < 0 || details.pregnantMembers < 0 || details.medicalNeeds < 0) {
+        cout << "[!] Invalid counts. Numbers cannot be negative.\n";
+        return;
+    }
+
+    // CALCULATE VulnerabilityScore
+    int vulnerabilityScore = calculateVulnerabilityScore(details);
+    string vulnerabilityLevel = determineVulnerabilityLevel(vulnerabilityScore);
+
+    // STORE family record
+    Family newFamily;
+    newFamily.familyCode = familyCode;
+    newFamily.headOfFamily = headOfFamily;
+    newFamily.numberOfFamilyMembers = numberOfFamilyMembers;
+    newFamily.numberOfVulnerableMembers = vulnerableCount;
+    newFamily.vulnerabilityScore = vulnerabilityScore;
+    newFamily.vulnerabilityLevel = vulnerabilityLevel;
+    newFamily.details = details;
+    newFamily.isEvacuated = false;
+
+    families[familyCount] = newFamily;
+    familyCount++;
+
+    // Optional evacuee registration linking for the head of family
+    if (evacueeCount < MAX_EVACUEES) {
+        Evacuee headEvacuee;
+        headEvacuee.evacueeId = formatCode("EVAC-", nextEvacueeNumber, 4);
+        headEvacuee.familyCode = familyCode;
+        headEvacuee.fullName = headOfFamily;
+        headEvacuee.age = 35; // Default representative age
+        headEvacuee.assignedCenter = "Unassigned";
+        headEvacuee.specialNeeds = (details.medicalNeeds > 0) ? "Medical Attention" : "None";
+
+        evacuees[evacueeCount] = headEvacuee;
+        evacueeCount++;
+        nextEvacueeNumber++;
+    }
+
+    // DISPLAY confirmation
+    cout << "\nFamily registered successfully.\n";
+    cout << "Family Code        : " << familyCode << "\n";
+    cout << "Vulnerability Level: " << vulnerabilityLevel
+         << " (Score: " << vulnerabilityScore << ")\n";
+
+    // INCREMENT NextFamilyNumber
+    nextFamilyNumber++;
+}
+
+// ========================================================================================
+// CASE 2: VIEW POPULATION
+// ========================================================================================
+void handleViewPopulation(const Family families[], int familyCount,
+                          const Evacuee evacuees[], int evacueeCount) {
+    cout << "==================================\n";
+    cout << "         VIEW POPULATION          \n";
+    cout << "==================================\n";
+    cout << "1. View All Evacuees\n";
+    cout << "2. View All Families\n";
+    cout << "Enter View Choice [1-2]: ";
+
+    int viewChoice;
+    if (!(cin >> viewChoice)) {
+        cout << "Invalid selection.\n";
+        clearInputBuffer();
+        return;
+    }
+    clearInputBuffer();
+
+    cout << "\n";
+
+    if (viewChoice == 1) {
+        cout << "--- ALL REGISTERED EVACUEES / FAMILY UNITS ---\n";
+        if (familyCount == 0) {
+            cout << "No families or evacuees registered yet.\n";
+            return;
+        }
+
+        cout << left << setw(12) << "Family Code"
+             << setw(26) << "Head of Family"
+             << right << setw(10) << "Members"
+             << "   " << left << setw(16) << "Vulnerability Level\n";
+        cout << "-----------------------------------------------------------------\n";
+
+        // FOR EACH Family IN FamilyList
+        for (int i = 0; i < familyCount; ++i) {
+            cout << left << setw(12) << families[i].familyCode
+                 << setw(26) << families[i].headOfFamily
+                 << right << setw(10) << families[i].numberOfFamilyMembers
+                 << "   " << left << setw(16) << families[i].vulnerabilityLevel << "\n";
+        }
+
+        // Detailed individual evacuee listing if any assigned
+        if (evacueeCount > 0) {
+            cout << "\n--- INDIVIDUAL EVACUEE REGISTRY ---\n";
+            cout << left << setw(12) << "Evacuee ID"
+                 << setw(12) << "Family Code"
+                 << setw(24) << "Full Name"
+                 << right << setw(6) << "Age"
+                 << "   " << left << setw(20) << "Assigned Center"
+                 << setw(20) << "Special Needs\n";
+            cout << "---------------------------------------------------------------------------------------------\n";
+            for (int i = 0; i < evacueeCount; ++i) {
+                displayRecord(evacuees[i]);
+            }
+        }
+    } else if (viewChoice == 2) {
+        cout << "--- ALL REGISTERED FAMILIES ---\n";
+        if (familyCount == 0) {
+            cout << "No families registered yet.\n";
+            return;
+        }
+
+        cout << left << setw(12) << "Family Code"
+             << setw(28) << "Head of Family"
+             << right << setw(10) << "Members\n";
+        cout << "----------------------------------------------------\n";
+
+        // FOR EACH Family IN FamilyList
+        for (int i = 0; i < familyCount; ++i) {
+            cout << left << setw(12) << families[i].familyCode
+                 << setw(28) << families[i].headOfFamily
+                 << right << setw(10) << families[i].numberOfFamilyMembers << "\n";
+        }
+    } else {
+        cout << "Invalid selection.\n";
+    }
+}
+
+// ========================================================================================
+// CASE 3: EVACUATION CENTER MANAGEMENT
+// ========================================================================================
+void handleEvacuationCenterManagement(EvacuationCenter centers[], int& centerCount) {
+    cout << "==================================\n";
+    cout << "   EVACUATION CENTER MANAGEMENT   \n";
+    cout << "==================================\n";
+    cout << "1. Add Evacuation Center\n";
+    cout << "2. View Evacuation Centers\n";
+    cout << "3. Update Center Information\n";
+    cout << "4. Delete Evacuation Center\n";
+    cout << "Enter Center Choice [1-4]: ";
+
+    int centerChoice;
+    if (!(cin >> centerChoice)) {
+        cout << "Invalid selection.\n";
+        clearInputBuffer();
+        return;
+    }
+    clearInputBuffer();
+
+    cout << "\n";
+
+    if (centerChoice == 1) {
+        if (centerCount >= MAX_CENTERS) {
+            cout << "[!] Maximum evacuation centers reached (" << MAX_CENTERS << ").\n";
+            return;
+        }
+
+        string facilityName;
+        string facilityType;
+        int maximumCapacity;
+        int currentOccupancy;
+
+        cout << "Enter Facility Name: ";
+        getline(cin, facilityName);
+
+        cout << "Enter Facility Type (e.g., Gym, School, Barangay Hall): ";
+        getline(cin, facilityType);
+
+        cout << "Enter Maximum Capacity: ";
+        cin >> maximumCapacity;
+
+        cout << "Enter Current Occupancy: ";
+        cin >> currentOccupancy;
+        clearInputBuffer();
+
+        // Validation rule from pseudocode
+        if (maximumCapacity > 0 && currentOccupancy >= 0 && currentOccupancy <= maximumCapacity) {
+            centers[centerCount].facilityName = facilityName;
+            centers[centerCount].facilityType = facilityType;
+            centers[centerCount].maximumCapacity = maximumCapacity;
+            centers[centerCount].currentOccupancy = currentOccupancy;
+            centerCount++;
+            cout << "Evacuation center added.\n";
+        } else {
+            cout << "Invalid capacity or occupancy.\n";
+        }
+    } else if (centerChoice == 2) {
+        cout << "--- EVACUATION CENTERS LIST ---\n";
+        if (centerCount == 0) {
+            cout << "No evacuation centers registered yet.\n";
+            return;
+        }
+
+        cout << left << setw(24) << "Facility Name"
+             << setw(18) << "Facility Type"
+             << right << setw(10) << "Max Cap"
+             << setw(12) << "Occupancy"
+             << setw(16) << "Available Slots\n";
+        cout << "-----------------------------------------------------------------------------------\n";
+
+        // FOR EACH Center IN EvacuationCenterList
+        for (int i = 0; i < centerCount; ++i) {
+            displayRecord(centers[i]);
+        }
+    } else if (centerChoice == 3) {
+        cout << "Enter Facility Name to Update: ";
+        string searchName;
+        getline(cin, searchName);
+
+        // SEARCH Center USING FacilityName (Recursive Search)
+        int index = recursiveSearchCenter(centers, centerCount, searchName);
+        if (index != -1) {
+            cout << "\nCenter Found: " << centers[index].facilityName << " (" << centers[index].facilityType << ")\n";
+            cout << "Enter New Facility Type (press Enter to keep '" << centers[index].facilityType << "'): ";
+            string newType;
+            getline(cin, newType);
+            if (!newType.empty()) {
+                centers[index].facilityType = newType;
+            }
+
+            cout << "Enter New Maximum Capacity (Current: " << centers[index].maximumCapacity << "): ";
+            int newMax;
+            if (cin >> newMax && newMax > 0) {
+                cout << "Enter New Current Occupancy (Current: " << centers[index].currentOccupancy << "): ";
+                int newOcc;
+                if (cin >> newOcc && newOcc >= 0 && newOcc <= newMax) {
+                    centers[index].maximumCapacity = newMax;
+                    centers[index].currentOccupancy = newOcc;
+                    cout << "Center information updated successfully.\n";
+                } else {
+                    cout << "Invalid occupancy value. Update aborted.\n";
+                }
+            } else {
+                cout << "Invalid maximum capacity. Update aborted.\n";
+            }
+            clearInputBuffer();
+        } else {
+            cout << "Evacuation center not found.\n";
+        }
+    } else if (centerChoice == 4) {
+        cout << "Enter Facility Name to Delete: ";
+        string searchName;
+        getline(cin, searchName);
+
+        // SEARCH Center USING FacilityName
+        int index = recursiveSearchCenter(centers, centerCount, searchName);
+        if (index != -1) {
+            cout << "Found Center: " << centers[index].facilityName << "\n";
+            // CONFIRM deletion
+            if (promptConfirmation("Are you sure you want to delete this center?")) {
+                // DELETE SelectedCenter IF confirmed (Array shift deletion)
+                for (int i = index; i < centerCount - 1; ++i) {
+                    centers[i] = centers[i + 1];
+                }
+                centerCount--;
+                cout << "Evacuation center deleted successfully.\n";
+            } else {
+                cout << "Deletion cancelled.\n";
+            }
+        } else {
+            cout << "Evacuation center not found.\n";
+        }
+    } else {
+        cout << "Invalid selection.\n";
+    }
+}
+
+// ========================================================================================
+// CASE 4: PENDING REQUEST ESCALATION
+// ========================================================================================
+void handlePendingRequestEscalation(ReliefRequest requests[], int& requestCount, int& nextRequestNumber,
+                                    const Family families[], int familyCount) {
+    cout << "==================================\n";
+    cout << "    PENDING REQUEST ESCALATION    \n";
+    cout << "==================================\n";
+    cout << "1. Submit Request\n";
+    cout << "2. View Pending Requests\n";
+    cout << "3. Update Request Status\n";
+    cout << "Enter Request Choice [1-3]: ";
+
+    int requestChoice;
+    if (!(cin >> requestChoice)) {
+        cout << "Invalid selection.\n";
+        clearInputBuffer();
+        return;
+    }
+    clearInputBuffer();
+
+    cout << "\n";
+
+    if (requestChoice == 1) {
+        if (requestCount >= MAX_REQUESTS) {
+            cout << "[!] Request queue is full (" << MAX_REQUESTS << ").\n";
+            return;
+        }
+
+        string familyCode;
+        string requestType;
+        string requestDescription;
+        char emergencyChar;
+        char mitigatingChar;
+
+        cout << "Enter Family Code: ";
+        getline(cin, familyCode);
+
+        // VERIFY FamilyCode exists (Recursive search)
+        int familyIndex = recursiveSearchFamily(families, familyCount, familyCode);
+        if (familyIndex == -1) {
+            cout << "Family record not found.\n";
+            return;
+        }
+
+        cout << "Enter Request Type (e.g., Food, Medicine, Rescue, Shelter): ";
+        getline(cin, requestType);
+
+        cout << "Enter Request Description: ";
+        getline(cin, requestDescription);
+
+        cout << "Is this an Emergency? (Y/N): ";
+        cin >> emergencyChar;
+
+        cout << "Has Mitigating Circumstances? (Y/N): ";
+        cin >> mitigatingChar;
+        clearInputBuffer();
+
+        bool isEmergency = (emergencyChar == 'Y' || emergencyChar == 'y');
+        bool hasMitigatingCircumstances = (mitigatingChar == 'Y' || mitigatingChar == 'y');
+
+        // Priority calculation logic directly from pseudocode
+        int priorityLevel = 4;
+        if (isEmergency) {
+            priorityLevel = 1;
+        } else if (families[familyIndex].vulnerabilityLevel == "HIGH") {
+            priorityLevel = 2;
+        } else if (hasMitigatingCircumstances) {
+            priorityLevel = 2;
+        } else if (families[familyIndex].vulnerabilityLevel == "MODERATE") {
+            priorityLevel = 3;
+        } else {
+            priorityLevel = 4;
+        }
+
+        string requestId = formatCode("REQ-", nextRequestNumber, 4);
+
+        // Store request
+        ReliefRequest newRequest;
+        newRequest.requestId = requestId;
+        newRequest.familyCode = familyCode;
+        newRequest.requestType = requestType;
+        newRequest.requestDescription = requestDescription;
+        newRequest.isEmergency = isEmergency;
+        newRequest.hasMitigatingCircumstances = hasMitigatingCircumstances;
+        newRequest.priorityLevel = priorityLevel;
+        newRequest.requestStatus = "PENDING";
+
+        requests[requestCount] = newRequest;
+        requestCount++;
+        nextRequestNumber++;
+
+        cout << "\nRequest submitted successfully.\n";
+        cout << "Request ID      : " << requestId << "\n";
+        cout << "Assigned Priority: Level " << priorityLevel
+             << " (" << (priorityLevel == 1 ? "EMERGENCY / CRITICAL" :
+                        priorityLevel == 2 ? "HIGH PRIORITY" :
+                        priorityLevel == 3 ? "MODERATE PRIORITY" : "ROUTINE") << ")\n";
+        cout << "Status          : PENDING\n";
+    } else if (requestChoice == 2) {
+        cout << "--- ESCALATION QUEUE (SORTED BY PRIORITY) ---\n";
+        if (requestCount == 0) {
+            cout << "No relief requests currently submitted.\n";
+            return;
+        }
+
+        // SORT RequestList BY PriorityLevel FROM HIGHEST TO LOWEST (Priority 1 first)
+        recursiveSortRequestsByPriority(requests, requestCount);
+
+        cout << left << setw(12) << "Request ID"
+             << setw(12) << "Family Code"
+             << setw(20) << "Request Type"
+             << right << setw(10) << "Priority"
+             << "   " << left << setw(14) << "Status"
+             << setw(24) << "Description\n";
+        cout << "--------------------------------------------------------------------------------------------------\n";
+
+        // FOR EACH Request IN RequestList
+        for (int i = 0; i < requestCount; ++i) {
+            displayRecord(requests[i]);
+        }
+    } else if (requestChoice == 3) {
+        cout << "Enter Request ID to Update (e.g., REQ-0001): ";
+        string reqId;
+        getline(cin, reqId);
+
+        // SEARCH RequestList USING RequestID
+        int reqIndex = recursiveSearchRequest(requests, requestCount, reqId);
+        if (reqIndex != -1) {
+            cout << "Found Request: [" << requests[reqIndex].requestId
+                 << "] Family: " << requests[reqIndex].familyCode
+                 << " Type: " << requests[reqIndex].requestType
+                 << " Current Status: " << requests[reqIndex].requestStatus << "\n";
+
+            cout << "Select New Status:\n";
+            cout << "1. PENDING\n";
+            cout << "2. APPROVED\n";
+            cout << "3. IN_PROGRESS\n";
+            cout << "4. RESOLVED\n";
+            cout << "5. REJECTED\n";
+            cout << "Enter status option [1-5]: ";
+
+            int statusChoice;
+            if (cin >> statusChoice) {
+                switch (statusChoice) {
+                    case 1: requests[reqIndex].requestStatus = "PENDING"; break;
+                    case 2: requests[reqIndex].requestStatus = "APPROVED"; break;
+                    case 3: requests[reqIndex].requestStatus = "IN_PROGRESS"; break;
+                    case 4: requests[reqIndex].requestStatus = "RESOLVED"; break;
+                    case 5: requests[reqIndex].requestStatus = "REJECTED"; break;
+                    default:
+                        cout << "Invalid status choice.\n";
+                        clearInputBuffer();
+                        return;
+                }
+                cout << "Request status updated to " << requests[reqIndex].requestStatus << " successfully.\n";
+            } else {
+                cout << "Invalid input.\n";
+            }
+            clearInputBuffer();
+        } else {
+            cout << "Request not found.\n";
+        }
+    } else {
+        cout << "Invalid selection.\n";
+    }
+}
+
+// ========================================================================================
+// CASE 5: EDIT OR DELETE RECORDS
+// ========================================================================================
+void handleEditOrDeleteRecords(Family families[], int& familyCount,
+                               Evacuee evacuees[], int& evacueeCount) {
+    cout << "==================================\n";
+    cout << "      EDIT OR DELETE RECORDS      \n";
+    cout << "==================================\n";
+    cout << "1. Edit Family Record\n";
+    cout << "2. Delete Family Record\n";
+    cout << "3. Edit Evacuee Information\n";
+    cout << "4. Delete Evacuee Record\n";
+    cout << "Enter Record Choice [1-4]: ";
+
+    int recordChoice;
+    if (!(cin >> recordChoice)) {
+        cout << "Invalid selection.\n";
+        clearInputBuffer();
+        return;
+    }
+    clearInputBuffer();
+
+    cout << "\n";
+
+    if (recordChoice == 1) {
+        // Edit Family Record
+        cout << "Enter Family Code to Edit (e.g., FAM-0001): ";
+        string code;
+        getline(cin, code);
+
+        int index = recursiveSearchFamily(families, familyCount, code);
+        if (index != -1) {
+            cout << "\n--- CURRENT FAMILY DETAILS ---\n";
+            displayRecord(families[index], true);
+
+            cout << "\nEnter Updated Head of Family (Press Enter to keep current): ";
+            string newHead;
+            getline(cin, newHead);
+            if (!newHead.empty()) {
+                families[index].headOfFamily = newHead;
+            }
+
+            cout << "Enter Updated Total Members (Current: " << families[index].numberOfFamilyMembers << "): ";
+            int newMembers;
+            if (cin >> newMembers && newMembers > 0) {
+                families[index].numberOfFamilyMembers = newMembers;
+            }
+            clearInputBuffer();
+
+            cout << "Do you want to re-assess vulnerability counts? (Y/N): ";
+            char reAssess;
+            cin >> reAssess;
+            clearInputBuffer();
+
+            if (reAssess == 'Y' || reAssess == 'y') {
+                VulnerabilityDetails d;
+                int vulnTotal;
+                cout << "Enter Vulnerable Members Count: ";
+                cin >> vulnTotal;
+                cout << "Children (<12): ";
+                cin >> d.children;
+                cout << "Senior Citizens (60+): ";
+                cin >> d.seniorCitizens;
+                cout << "PWDs: ";
+                cin >> d.personsWithDisabilities;
+                cout << "Pregnant Members: ";
+                cin >> d.pregnantMembers;
+                cout << "Medical Needs: ";
+                cin >> d.medicalNeeds;
+                clearInputBuffer();
+
+                if (vulnTotal >= 0 && d.children >= 0 && d.seniorCitizens >= 0 &&
+                    d.personsWithDisabilities >= 0 && d.pregnantMembers >= 0 && d.medicalNeeds >= 0) {
+                    families[index].numberOfVulnerableMembers = vulnTotal;
+                    families[index].details = d;
+                    families[index].vulnerabilityScore = calculateVulnerabilityScore(d);
+                    families[index].vulnerabilityLevel = determineVulnerabilityLevel(families[index].vulnerabilityScore);
+                    cout << "Vulnerability scores recomputed: " << families[index].vulnerabilityLevel << "\n";
+                }
+            }
+            cout << "Family record updated successfully.\n";
+        } else {
+            cout << "Record not found.\n";
+        }
+    } else if (recordChoice == 2) {
+        // Delete Family Record
+        cout << "Enter Family Code to Delete: ";
+        string code;
+        getline(cin, code);
+
+        int index = recursiveSearchFamily(families, familyCount, code);
+        if (index != -1) {
+            cout << "Family Found: " << families[index].familyCode << " - " << families[index].headOfFamily << "\n";
+            if (promptConfirmation("CONFIRM: Are you sure you want to permanently delete this family?")) {
+                for (int i = index; i < familyCount - 1; ++i) {
+                    families[i] = families[i + 1];
+                }
+                familyCount--;
+                cout << "Family record deleted.\n";
+            } else {
+                cout << "Deletion cancelled.\n";
+            }
+        } else {
+            cout << "Record not found.\n";
+        }
+    } else if (recordChoice == 3) {
+        // Edit Evacuee Information
+        cout << "Enter Evacuee ID to Edit (e.g., EVAC-0001): ";
+        string id;
+        getline(cin, id);
+
+        int index = recursiveSearchEvacuee(evacuees, evacueeCount, id);
+        if (index != -1) {
+            cout << "Current Evacuee: " << evacuees[index].fullName << " (" << evacuees[index].assignedCenter << ")\n";
+
+            cout << "Enter Updated Full Name (Enter to keep): ";
+            string newName;
+            getline(cin, newName);
+            if (!newName.empty()) evacuees[index].fullName = newName;
+
+            cout << "Enter Updated Assigned Center (Enter to keep): ";
+            string newCenter;
+            getline(cin, newCenter);
+            if (!newCenter.empty()) evacuees[index].assignedCenter = newCenter;
+
+            cout << "Enter Updated Special Needs (Enter to keep): ";
+            string newNeeds;
+            getline(cin, newNeeds);
+            if (!newNeeds.empty()) evacuees[index].specialNeeds = newNeeds;
+
+            cout << "Evacuee information updated.\n";
+        } else {
+            cout << "Record not found.\n";
+        }
+    } else if (recordChoice == 4) {
+        // Delete Evacuee Record
+        cout << "Enter Evacuee ID to Delete: ";
+        string id;
+        getline(cin, id);
+
+        int index = recursiveSearchEvacuee(evacuees, evacueeCount, id);
+        if (index != -1) {
+            cout << "Evacuee Found: " << evacuees[index].evacueeId << " - " << evacuees[index].fullName << "\n";
+            if (promptConfirmation("CONFIRM: Are you sure you want to delete this evacuee record?")) {
+                for (int i = index; i < evacueeCount - 1; ++i) {
+                    evacuees[i] = evacuees[i + 1];
+                }
+                evacueeCount--;
+                cout << "Evacuee record deleted.\n";
+            } else {
+                cout << "Deletion cancelled.\n";
+            }
+        } else {
+            cout << "Record not found.\n";
+        }
+    } else {
+        cout << "Invalid selection.\n";
+    }
+}
+
+// ========================================================================================
+// CASE 6: VIEW POPULATION SUMMARY
+// ========================================================================================
+void handlePopulationSummary(const Family families[], int familyCount,
+                             const EvacuationCenter centers[], int centerCount,
+                             const ReliefRequest requests[], int requestCount) {
+    cout << "==================================\n";
+    cout << "     VIEW POPULATION SUMMARY      \n";
+    cout << "==================================\n";
+
+    // Variables initialized as required by pseudocode
+    int totalFamilies = 0;
+    int totalPopulation = 0;
+    int totalEvacuees = 0;
+    int totalVulnerableMembers = 0;
+    int totalAvailableSlots = 0;
+
+    // FOR EACH Family IN FamilyList
+    for (int i = 0; i < familyCount; ++i) {
+        totalFamilies++;
+        totalPopulation += families[i].numberOfFamilyMembers;
+        totalVulnerableMembers += families[i].numberOfVulnerableMembers;
+    }
+
+    // FOR EACH Center IN EvacuationCenterList
+    for (int i = 0; i < centerCount; ++i) {
+        totalEvacuees += centers[i].currentOccupancy;
+        totalAvailableSlots += (centers[i].maximumCapacity - centers[i].currentOccupancy);
+    }
+
+    // Calculations based on syllabus arithmetic operations
+    int populationNotCurrentlyInCenters = totalPopulation - totalEvacuees;
+    if (populationNotCurrentlyInCenters < 0) {
+        populationNotCurrentlyInCenters = 0;
+    }
+
+    // Recursive calculations to verify / demonstrate Unit 5 Recursion
+    int pendingRequestsCount = recursiveCountPendingRequests(requests, requestCount);
+    int highVulnerabilityFamiliesCount = recursiveCountHighVulnerability(families, familyCount);
+
+    cout << left << setw(42) << "Total Families Registered"
+         << ": " << right << setw(6) << totalFamilies << "\n";
+    cout << left << setw(42) << "Total Barangay Population"
+         << ": " << right << setw(6) << totalPopulation << "\n";
+    cout << left << setw(42) << "Total Evacuees in Centers"
+         << ": " << right << setw(6) << totalEvacuees << "\n";
+    cout << left << setw(42) << "Total Vulnerable Members"
+         << ": " << right << setw(6) << totalVulnerableMembers << "\n";
+    cout << left << setw(42) << "Population Not Currently In Centers"
+         << ": " << right << setw(6) << populationNotCurrentlyInCenters << "\n";
+    cout << left << setw(42) << "Total Available Evacuation Center Slots"
+         << ": " << right << setw(6) << totalAvailableSlots << "\n";
+    cout << left << setw(42) << "Number of Pending Requests"
+         << ": " << right << setw(6) << pendingRequestsCount << "\n";
+    cout << left << setw(42) << "Number of HIGH Vulnerability Families"
+         << ": " << right << setw(6) << highVulnerabilityFamiliesCount << "\n";
+
+    // Unit 6 Topic 7: Multi-dimensional array breakdown demonstration
+    int demoMatrix[VULN_LEVEL_ROWS][DEMO_COLUMNS];
+    generateDemographicMatrix(families, familyCount, demoMatrix);
+    displayDemographicMatrix(demoMatrix);
+}
+
+// ========================================================================================
+// CASE 7: SAVE AND EXIT (File Persistence)
+// ========================================================================================
+void handleSaveAndExit(const Family families[], int familyCount,
+                       const EvacuationCenter centers[], int centerCount,
+                       const ReliefRequest requests[], int requestCount,
+                       const Evacuee evacuees[], int evacueeCount,
+                       int nextFamilyNumber, int nextRequestNumber, int nextEvacueeNumber) {
+    saveData(families, familyCount,
+             centers, centerCount,
+             requests, requestCount,
+             evacuees, evacueeCount,
+             nextFamilyNumber, nextRequestNumber, nextEvacueeNumber);
+
+    cout << "SALBAR data saved successfully.\n";
+    cout << "Thank you for using SALBAR.\n";
+}
+
+// ========================================================================================
+// DATA PERSISTENCE IMPLEMENTATION (<fstream>)
+// ========================================================================================
+void saveData(const Family families[], int familyCount,
+              const EvacuationCenter centers[], int centerCount,
+              const ReliefRequest requests[], int requestCount,
+              const Evacuee evacuees[], int evacueeCount,
+              int nextFamilyNumber, int nextRequestNumber, int nextEvacueeNumber) {
+    // 1. Save Config IDs
+    ofstream cfgOut(FILE_CONFIG.c_str());
+    if (cfgOut.is_open()) {
+        cfgOut << nextFamilyNumber << " " << nextRequestNumber << " " << nextEvacueeNumber << "\n";
+        cfgOut.close();
+    }
+
+    // 2. Save FamilyList
+    ofstream famOut(FILE_FAMILIES.c_str());
+    if (famOut.is_open()) {
+        famOut << familyCount << "\n";
+        for (int i = 0; i < familyCount; ++i) {
+            famOut << families[i].familyCode << "\n"
+                   << families[i].headOfFamily << "\n"
+                   << families[i].numberOfFamilyMembers << "\n"
+                   << families[i].numberOfVulnerableMembers << "\n"
+                   << families[i].vulnerabilityScore << "\n"
+                   << families[i].vulnerabilityLevel << "\n"
+                   << families[i].details.children << "\n"
+                   << families[i].details.seniorCitizens << "\n"
+                   << families[i].details.personsWithDisabilities << "\n"
+                   << families[i].details.pregnantMembers << "\n"
+                   << families[i].details.medicalNeeds << "\n"
+                   << families[i].isEvacuated << "\n";
+        }
+        famOut.close();
+    }
+
+    // 3. Save EvacuationCenterList
+    ofstream centOut(FILE_CENTERS.c_str());
+    if (centOut.is_open()) {
+        centOut << centerCount << "\n";
+        for (int i = 0; i < centerCount; ++i) {
+            centOut << centers[i].facilityName << "\n"
+                    << centers[i].facilityType << "\n"
+                    << centers[i].maximumCapacity << "\n"
+                    << centers[i].currentOccupancy << "\n";
+        }
+        centOut.close();
+    }
+
+    // 4. Save RequestList
+    ofstream reqOut(FILE_REQUESTS.c_str());
+    if (reqOut.is_open()) {
+        reqOut << requestCount << "\n";
+        for (int i = 0; i < requestCount; ++i) {
+            reqOut << requests[i].requestId << "\n"
+                   << requests[i].familyCode << "\n"
+                   << requests[i].requestType << "\n"
+                   << requests[i].requestDescription << "\n"
+                   << requests[i].isEmergency << "\n"
+                   << requests[i].hasMitigatingCircumstances << "\n"
+                   << requests[i].priorityLevel << "\n"
+                   << requests[i].requestStatus << "\n";
+        }
+        reqOut.close();
+    }
+
+    // 5. Save EvacueeList
+    ofstream evacOut(FILE_EVACUEES.c_str());
+    if (evacOut.is_open()) {
+        evacOut << evacueeCount << "\n";
+        for (int i = 0; i < evacueeCount; ++i) {
+            evacOut << evacuees[i].evacueeId << "\n"
+                    << evacuees[i].familyCode << "\n"
+                    << evacuees[i].fullName << "\n"
+                    << evacuees[i].age << "\n"
+                    << evacuees[i].assignedCenter << "\n"
+                    << evacuees[i].specialNeeds << "\n";
+        }
+        evacOut.close();
+    }
+}
+
+void loadData(Family families[], int& familyCount,
+              EvacuationCenter centers[], int& centerCount,
+              ReliefRequest requests[], int& requestCount,
+              Evacuee evacuees[], int& evacueeCount,
+              int& nextFamilyNumber, int& nextRequestNumber, int& nextEvacueeNumber) {
+    // 1. Load Config IDs
+    ifstream cfgIn(FILE_CONFIG.c_str());
+    if (cfgIn.is_open()) {
+        cfgIn >> nextFamilyNumber >> nextRequestNumber >> nextEvacueeNumber;
+        cfgIn.close();
+    }
+
+    // 2. Load FamilyList
+    ifstream famIn(FILE_FAMILIES.c_str());
+    if (famIn.is_open()) {
+        famIn >> familyCount;
+        famIn.ignore();
+        for (int i = 0; i < familyCount && i < MAX_FAMILIES; ++i) {
+            getline(famIn, families[i].familyCode);
+            getline(famIn, families[i].headOfFamily);
+            famIn >> families[i].numberOfFamilyMembers;
+            famIn >> families[i].numberOfVulnerableMembers;
+            famIn >> families[i].vulnerabilityScore;
+            famIn.ignore();
+            getline(famIn, families[i].vulnerabilityLevel);
+            famIn >> families[i].details.children;
+            famIn >> families[i].details.seniorCitizens;
+            famIn >> families[i].details.personsWithDisabilities;
+            famIn >> families[i].details.pregnantMembers;
+            famIn >> families[i].details.medicalNeeds;
+            famIn >> families[i].isEvacuated;
+            famIn.ignore();
+        }
+        famIn.close();
+    }
+
+    // 3. Load EvacuationCenterList
+    ifstream centIn(FILE_CENTERS.c_str());
+    if (centIn.is_open()) {
+        centIn >> centerCount;
+        centIn.ignore();
+        for (int i = 0; i < centerCount && i < MAX_CENTERS; ++i) {
+            getline(centIn, centers[i].facilityName);
+            getline(centIn, centers[i].facilityType);
+            centIn >> centers[i].maximumCapacity;
+            centIn >> centers[i].currentOccupancy;
+            centIn.ignore();
+        }
+        centIn.close();
+    }
+
+    // 4. Load RequestList
+    ifstream reqIn(FILE_REQUESTS.c_str());
+    if (reqIn.is_open()) {
+        reqIn >> requestCount;
+        reqIn.ignore();
+        for (int i = 0; i < requestCount && i < MAX_REQUESTS; ++i) {
+            getline(reqIn, requests[i].requestId);
+            getline(reqIn, requests[i].familyCode);
+            getline(reqIn, requests[i].requestType);
+            getline(reqIn, requests[i].requestDescription);
+            reqIn >> requests[i].isEmergency;
+            reqIn >> requests[i].hasMitigatingCircumstances;
+            reqIn >> requests[i].priorityLevel;
+            reqIn.ignore();
+            getline(reqIn, requests[i].requestStatus);
+        }
+        reqIn.close();
+    }
+
+    // 5. Load EvacueeList
+    ifstream evacIn(FILE_EVACUEES.c_str());
+    if (evacIn.is_open()) {
+        evacIn >> evacueeCount;
+        evacIn.ignore();
+        for (int i = 0; i < evacueeCount && i < MAX_EVACUEES; ++i) {
+            getline(evacIn, evacuees[i].evacueeId);
+            getline(evacIn, evacuees[i].familyCode);
+            getline(evacIn, evacuees[i].fullName);
+            evacIn >> evacuees[i].age;
+            evacIn.ignore();
+            getline(evacIn, evacuees[i].assignedCenter);
+            getline(evacIn, evacuees[i].specialNeeds);
+        }
+        evacIn.close();
+    }
+}
