@@ -17,12 +17,13 @@ const int MAX_EVACUEES = 200;
 const int VULN_LEVEL_ROWS = 3;
 const int DEMO_COLUMNS   = 5;
 
-// Data persistence filenames (Case 7: Save and Exit)
-const std::string FILE_FAMILIES = "families.txt";
-const std::string FILE_CENTERS  = "centers.txt";
-const std::string FILE_REQUESTS = "requests.txt";
-const std::string FILE_EVACUEES = "evacuees.txt";
-const std::string FILE_CONFIG   = "config.txt";
+// Data persistence directory and filenames (Case 7: Save and Exit)
+const std::string DATA_DIR      = "data";
+const std::string FILE_FAMILIES = "data/families.txt";
+const std::string FILE_CENTERS  = "data/centers.txt";
+const std::string FILE_REQUESTS = "data/requests.txt";
+const std::string FILE_EVACUEES = "data/evacuees.txt";
+const std::string FILE_CONFIG   = "data/config.txt";
 
 // ========================================================================================
 // DATA STRUCTURES (Unit 1 & 6: Data Organization & Records)

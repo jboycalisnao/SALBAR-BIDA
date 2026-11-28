@@ -1,4 +1,5 @@
 #include "analytics.h"
+#include "operations.h"
 #include "ui.h"
 #include <iostream>
 #include <iomanip>
@@ -34,6 +35,24 @@ string determineVulnerabilityLevel(int score) {
     } else {
         return "LOW";
     }
+}
+
+void displayVulnerabilityScoreBreakdown(const VulnerabilityDetails& details, int totalScore) {
+    int childPts    = details.children * 1;
+    int seniorPts   = details.seniorCitizens * 2;
+    int pwdPts      = details.personsWithDisabilities * 3;
+    int pregnantPts = details.pregnantMembers * 3;
+    int medicalPts  = details.medicalNeeds * 3;
+
+    cout << "\n  " << Color::BOLD << Color::BRIGHT_CYAN << "--- Vulnerability Score Breakdown ---" << Color::RESET << "\n";
+    cout << "  " << left << setw(27) << "- Children (<12 yrs)"      << ": " << right << setw(3) << details.children                << " x 1 pt  = " << Color::BOLD << setw(3) << childPts    << Color::RESET << "\n";
+    cout << "  " << left << setw(27) << "- Senior Citizens (60+)"   << ": " << right << setw(3) << details.seniorCitizens          << " x 2 pts = " << Color::BOLD << setw(3) << seniorPts   << Color::RESET << "\n";
+    cout << "  " << left << setw(27) << "- Persons with Disability" << ": " << right << setw(3) << details.personsWithDisabilities << " x 3 pts = " << Color::BOLD << setw(3) << pwdPts      << Color::RESET << "\n";
+    cout << "  " << left << setw(27) << "- Pregnant Members"        << ": " << right << setw(3) << details.pregnantMembers         << " x 3 pts = " << Color::BOLD << setw(3) << pregnantPts << Color::RESET << "\n";
+    cout << "  " << left << setw(27) << "- Medical Needs"           << ": " << right << setw(3) << details.medicalNeeds            << " x 3 pts = " << Color::BOLD << setw(3) << medicalPts  << Color::RESET << "\n";
+    cout << "  " << Color::DIM << "-------------------------------------------" << Color::RESET << "\n";
+    cout << "  " << left << setw(27) << "Total Computed Score"      << ": " << Color::BOLD << Color::BRIGHT_WHITE << totalScore << Color::RESET
+         << Color::DIM << "  (>=8 HIGH | >=4 MODERATE | <4 LOW)" << Color::RESET << "\n";
 }
 
 // ========================================================================================
@@ -93,4 +112,72 @@ void displayDemographicMatrix(const int matrix[VULN_LEVEL_ROWS][DEMO_COLUMNS]) {
         cout << "\n";
     }
     printDivider(82, '=');
+}
+
+// ========================================================================================
+// CASE 6: VIEW POPULATION SUMMARY
+// ========================================================================================
+void handlePopulationSummary(const Family families[], int familyCount,
+                             const EvacuationCenter centers[], int centerCount,
+                             const ReliefRequest requests[], int requestCount) {
+    clearScreen();
+    printSectionHeader("BARANGAY POPULATION & DISASTER SUMMARY");
+
+    int totalFamilies = 0;
+    int activeFamilies = 0;
+    int disabledFamilies = 0;
+    int totalPopulation = 0;
+    int totalEvacuees = 0;
+    int totalVulnerableMembers = 0;
+    int totalAvailableSlots = 0;
+
+    for (int i = 0; i < familyCount; ++i) {
+        totalFamilies++;
+        if (families[i].isActive) {
+            activeFamilies++;
+            totalPopulation += families[i].numberOfFamilyMembers;
+            totalVulnerableMembers += families[i].numberOfVulnerableMembers;
+        } else {
+            disabledFamilies++;
+        }
+    }
+
+    for (int i = 0; i < centerCount; ++i) {
+        totalEvacuees += centers[i].currentOccupancy;
+        totalAvailableSlots += (centers[i].maximumCapacity - centers[i].currentOccupancy);
+    }
+
+    int populationNotCurrentlyInCenters = totalPopulation - totalEvacuees;
+    if (populationNotCurrentlyInCenters < 0) {
+        populationNotCurrentlyInCenters = 0;
+    }
+
+    int pendingRequestsCount = recursiveCountPendingRequests(requests, requestCount);
+    int highVulnerabilityFamiliesCount = recursiveCountHighVulnerability(families, familyCount);
+
+    printDivider(65, '=');
+    cout << "  " << left << setw(44) << "Total Families Registered"
+         << ": " << Color::BOLD << Color::BRIGHT_CYAN << right << setw(6) << totalFamilies << Color::RESET
+         << " (" << activeFamilies << " Active, " << disabledFamilies << " Disabled)\n";
+    cout << "  " << left << setw(44) << "Total Barangay Population"
+         << ": " << Color::BOLD << right << setw(6) << totalPopulation << Color::RESET << "\n";
+    cout << "  " << left << setw(44) << "Total Evacuees in Centers"
+         << ": " << Color::BOLD << Color::BRIGHT_YELLOW << right << setw(6) << totalEvacuees << Color::RESET << "\n";
+    cout << "  " << left << setw(44) << "Total Vulnerable Members"
+         << ": " << Color::BOLD << Color::BRIGHT_RED << right << setw(6) << totalVulnerableMembers << Color::RESET << "\n";
+    cout << "  " << left << setw(44) << "Population Not In Centers"
+         << ": " << Color::BOLD << right << setw(6) << populationNotCurrentlyInCenters << Color::RESET << "\n";
+    cout << "  " << left << setw(44) << "Total Available Evacuation Slots"
+         << ": " << Color::BOLD << Color::BRIGHT_GREEN << right << setw(6) << totalAvailableSlots << Color::RESET << "\n";
+    cout << "  " << left << setw(44) << "Pending Relief Requests (Recursive)"
+         << ": " << (pendingRequestsCount > 0 ? Color::BRIGHT_YELLOW : Color::DIM) << right << setw(6) << pendingRequestsCount << Color::RESET << "\n";
+    cout << "  " << left << setw(44) << "HIGH Vulnerability Families (Recursive)"
+         << ": " << (highVulnerabilityFamiliesCount > 0 ? Color::BRIGHT_RED : Color::DIM) << right << setw(6) << highVulnerabilityFamiliesCount << Color::RESET << "\n";
+    printDivider(65, '=');
+
+    // Unit 6 Topic 7: Multi-dimensional array breakdown demonstration
+    int demoMatrix[VULN_LEVEL_ROWS][DEMO_COLUMNS];
+    generateDemographicMatrix(families, familyCount, demoMatrix);
+    displayDemographicMatrix(demoMatrix);
+    pauseConsole();
 }

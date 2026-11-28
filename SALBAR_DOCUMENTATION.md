@@ -30,7 +30,7 @@ The program directly satisfies the **Course Learning Outcomes (LO1–LO4)** and 
 | **Unit 5: Recursion Requirement** | Base cases, recursive calls, call stack | 1. `recursiveSearchFamily()`<br>2. `recursiveSearchCenter()`<br>3. `recursiveSearchRequest()`<br>4. `recursiveCountHighVulnerability()`<br>5. `recursiveSumOccupancy()`<br>6. `recursiveSortRequestsByPriority()` |
 | **Unit 6: Arrays** | 1D arrays, array traversal, searching, sorting, arrays as parameters | Parallel/record arrays for families, centers, requests, and evacuees passed as function parameters. |
 | **Unit 6: Multi-Dimensional Arrays** | 2D array declaration, nested row-column indexing | 2D Demographic Matrix `matrix[3][5]` (Vulnerability Level vs. Demographic Group). |
-| **File I/O (Persistence)** | `<fstream>`, file writing and reading | Automatic file storage and recovery on launch (`families.txt`, `centers.txt`, `requests.txt`, `evacuees.txt`, `config.txt`). |
+| **File I/O (Persistence)** | `<fstream>`, file writing and reading | Automatic file storage and recovery on launch (`data/families.txt`, `data/centers.txt`, `data/requests.txt`, `data/evacuees.txt`, `data/config.txt`). |
 
 ---
 
@@ -104,10 +104,13 @@ The system is organized into modular header (`.h`) and implementation (`.cpp`) f
 | **Data Models & Constants** | `models.h` | Defines global limits (`MAX_FAMILIES`, etc.), filenames, and data structures (`Family`, `EvacuationCenter`, `ReliefRequest`, `Evacuee`, `VulnerabilityDetails`). |
 | **UI Styling & Terminal Colors** | `ui.h`, `ui.cpp` | ANSI color codes, Windows Virtual Terminal initialization, visual badges (`[HIGH]`, `[L1: EMERGENCY]`), status badges, and styled table formatting. |
 | **System Utilities** | `utils.h`, `utils.cpp` | Screen header, buffer flushing, uppercase conversion, code formatter, and user confirmation prompts. |
-| **Demographic Analytics** | `analytics.h`, `analytics.cpp` | Vulnerability scoring, level classification, and 2D demographic cross-tabulation matrix. |
+| **Demographic Analytics** | `analytics.h`, `analytics.cpp` | Vulnerability scoring, level classification, 2D demographic cross-tabulation matrix, and Case 6 summary report. |
 | **Record Operations** | `operations.h`, `operations.cpp` | Overloaded `displayRecord()` functions, recursive searches, recursive aggregations, and recursive sorting. |
-| **Data Persistence** | `persistence.h`, `persistence.cpp` | File I/O functions (`loadData()` and `saveData()`) for persistent disk storage across restarts. |
-| **Menu Case Handlers** | `handlers.h`, `handlers.cpp` | Subsystem menu handlers executing Cases 1 through 7. |
+| **Data Persistence** | `persistence.h`, `persistence.cpp` | File I/O functions (`loadData()`, `saveData()`) and Case 7 (`handleSaveAndExit()`). |
+| **Family Registry Module** | `family_module.h`, `family_module.cpp` | Case 1 (Family Registration) and Case 2 (View Population & Family Registry). |
+| **Evacuation Center Module** | `center_module.h`, `center_module.cpp` | Case 3 (Evacuation Center Management & cascading evacuee removal). |
+| **Relief Request Module** | `request_module.h`, `request_module.cpp` | Case 4 (Relief Request submission, priority escalation, and status updates). |
+| **Record Maintenance Module** | `record_module.h`, `record_module.cpp` | Case 5 (Edit, disable/re-enable families, and edit/delete evacuees). |
 | **Main Driver** | `salbar.cpp` | Program entry point (`main()`), main menu presentation, and do-while control loop. |
 | **Monolithic Backup** | `salbar_monolithic.cpp.bak` | Preserved single-file version for archive/submission reference. |
 
@@ -124,7 +127,7 @@ cd "c:\Users\Calisnao\OneDrive - Leon National High School\JBOY\COLLEGE LIFE IS 
 g++ -std=c++11 -Wall *.cpp -o salbar.exe
 
 # Or specify individual modules:
-g++ -std=c++11 -Wall ui.cpp utils.cpp analytics.cpp operations.cpp persistence.cpp handlers.cpp salbar.cpp -o salbar.exe
+g++ -std=c++11 -Wall ui.cpp utils.cpp analytics.cpp operations.cpp persistence.cpp family_module.cpp center_module.cpp request_module.cpp record_module.cpp salbar.cpp -o salbar.exe
 
 # Run the program
 ./salbar.exe
@@ -133,7 +136,7 @@ g++ -std=c++11 -Wall ui.cpp utils.cpp analytics.cpp operations.cpp persistence.c
 ### Option B: Using Dev-C++ or Code::Blocks
 1. Open Dev-C++ or Code::Blocks.
 2. Create a new **Console Project** (or add all `.h` and `.cpp` files to the project).
-3. Add `models.h`, `utils.h`, `utils.cpp`, `analytics.h`, `analytics.cpp`, `operations.h`, `operations.cpp`, `persistence.h`, `persistence.cpp`, `handlers.h`, `handlers.cpp`, and `salbar.cpp`.
+3. Add all `.h` and `.cpp` files (`models.h`, `ui.*`, `utils.*`, `analytics.*`, `operations.*`, `persistence.*`, `family_module.*`, `center_module.*`, `request_module.*`, `record_module.*`, and `salbar.cpp`).
 4. Press **F9** (or **Execute -> Compile & Run**).
 
 ### Option C: Using Visual Studio / VS Code

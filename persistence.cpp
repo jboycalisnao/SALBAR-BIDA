@@ -1,6 +1,15 @@
 #include "persistence.h"
+#include "utils.h"
+#include "ui.h"
 #include <fstream>
+#include <iostream>
 #include <string>
+
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 
 using namespace std;
 
@@ -14,6 +23,13 @@ void saveData(const Family families[], int familyCount,
               const Evacuee evacuees[], int evacueeCount,
               int nextFamilyNumber, int nextRequestNumber, int nextEvacueeNumber,
               int activeCenterIndex) {
+    // Ensure data directory exists before writing files
+#ifdef _WIN32
+    _mkdir(DATA_DIR.c_str());
+#else
+    mkdir(DATA_DIR.c_str(), 0755);
+#endif
+
     // 1. Save Config IDs and Active Center Index
     ofstream cfgOut(FILE_CONFIG.c_str());
     if (cfgOut.is_open()) {
@@ -190,4 +206,80 @@ void loadData(Family families[], int& familyCount,
         }
         evacIn.close();
     }
+}
+
+// ========================================================================================
+// CASE 7: SYSTEM EXIT & DATA MANAGEMENT (Confirm Exit / Clear System Data)
+// ========================================================================================
+bool handleSaveAndExit(Family families[], int& familyCount,
+                       EvacuationCenter centers[], int& centerCount,
+                       ReliefRequest requests[], int& requestCount,
+                       Evacuee evacuees[], int& evacueeCount,
+                       int& nextFamilyNumber, int& nextRequestNumber, int& nextEvacueeNumber,
+                       int& activeCenterIndex) {
+    clearScreen();
+    printSectionHeader("SYSTEM EXIT & DATA MANAGEMENT");
+    cout << "  " << Color::BOLD << Color::BRIGHT_GREEN << "[1]" << Color::RESET << "  Confirm Save & Exit System\n";
+    cout << "  " << Color::BOLD << Color::BRIGHT_RED   << "[2]" << Color::RESET << "  Clear All System Data (Reset Database)\n";
+    cout << "  " << Color::BOLD << Color::BRIGHT_CYAN  << "[0]" << Color::RESET << "  Cancel / Return to Main Menu\n\n";
+
+    int exitChoice = promptBoundedIntOrCancel("Enter Choice (or '0' to cancel)", 1, 2, 0, "Please select 1, 2, or 0");
+
+    if (exitChoice == 0) {
+        printInfo("Exit cancelled. Returning to main menu.");
+        return false;
+    }
+
+    if (exitChoice == 1) {
+        clearScreen();
+        saveData(families, familyCount,
+                 centers, centerCount,
+                 requests, requestCount,
+                 evacuees, evacueeCount,
+                 nextFamilyNumber, nextRequestNumber, nextEvacueeNumber,
+                 activeCenterIndex);
+
+        cout << "\n";
+        printSuccess("SALBAR database state saved successfully to text files.");
+        cout << Color::BOLD << Color::BRIGHT_CYAN << "Thank you for using SALBAR. Stay safe!\n" << Color::RESET;
+        return true;
+    }
+
+    // Option 2: Dedicated Confirmation Page for Clearing All System Data
+    clearScreen();
+    printSectionHeader("CLEAR ALL SYSTEM DATA (CONFIRMATION)");
+    printWarning("This action will permanently erase ALL stored records from memory and disk:");
+    cout << "  - Families Registered   : " << Color::BOLD << familyCount << Color::RESET << "\n";
+    cout << "  - Evacuation Centers    : " << Color::BOLD << centerCount << Color::RESET << "\n";
+    cout << "  - Relief Requests       : " << Color::BOLD << requestCount << Color::RESET << "\n";
+    cout << "  - Individual Evacuees   : " << Color::BOLD << evacueeCount << Color::RESET << "\n\n";
+
+    bool confirmClear = false;
+    if (!promptYesNoOrCancel(Color::BOLD + Color::BRIGHT_RED + "Are you SURE you want to permanently clear all system data?" + Color::RESET, confirmClear) || !confirmClear) {
+        printInfo("Data clear cancelled. No records were deleted.");
+        pauseConsole();
+        return false;
+    }
+
+    // Reset all counts, IDs, and active center index
+    familyCount = 0;
+    centerCount = 0;
+    requestCount = 0;
+    evacueeCount = 0;
+    nextFamilyNumber = 1;
+    nextRequestNumber = 1;
+    nextEvacueeNumber = 1;
+    activeCenterIndex = 0;
+
+    saveData(families, familyCount,
+             centers, centerCount,
+             requests, requestCount,
+             evacuees, evacueeCount,
+             nextFamilyNumber, nextRequestNumber, nextEvacueeNumber,
+             activeCenterIndex);
+
+    cout << "\n";
+    printSuccess("All system data has been permanently cleared and reset.");
+    pauseConsole();
+    return false;
 }

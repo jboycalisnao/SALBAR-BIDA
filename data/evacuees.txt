@@ -1,0 +1,13 @@
+2
+EVAC-0001
+FAM-0001
+Jboy
+35
+Iloilo City Evacuation Center
+Medical Attention
+EVAC-0002
+FAM-0002
+Jboy
+35
+Iloilo City Evacuation Center
+Medical Attention

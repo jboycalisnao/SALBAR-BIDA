@@ -1,7 +1,11 @@
 #include <iostream>
 #include "models.h"
 #include "utils.h"
-#include "handlers.h"
+#include "family_module.h"
+#include "center_module.h"
+#include "request_module.h"
+#include "record_module.h"
+#include "analytics.h"
 #include "persistence.h"
 #include "ui.h"
 
@@ -40,8 +44,9 @@ int main() {
              activeCenterIndex);
 
     int choice = 0;
+    bool shouldExit = false;
 
-    // REPEAT ... UNTIL Choice = 7 (Unit 4: Do-While Iterative Structure)
+    // REPEAT ... UNTIL shouldExit == true (Unit 4: Do-While Iterative Structure)
     do {
         clearScreen();
 
@@ -130,12 +135,12 @@ int main() {
                 break;
 
             case 7:
-                handleSaveAndExit(familyList, familyCount,
-                                  evacuationCenterList, centerCount,
-                                  requestList, requestCount,
-                                  evacueeList, evacueeCount,
-                                  nextFamilyNumber, nextRequestNumber, nextEvacueeNumber,
-                                  activeCenterIndex);
+                shouldExit = handleSaveAndExit(familyList, familyCount,
+                                               evacuationCenterList, centerCount,
+                                               requestList, requestCount,
+                                               evacueeList, evacueeCount,
+                                               nextFamilyNumber, nextRequestNumber, nextEvacueeNumber,
+                                               activeCenterIndex);
                 break;
 
             default:
@@ -145,7 +150,7 @@ int main() {
         }
 
         cout << "\n";
-    } while (choice != 7);
+    } while (!shouldExit);
 
     return 0;
 }
